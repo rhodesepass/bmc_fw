@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>EPASS / BMC 调试台</title>
+  <!-- XTERM_CSS -->
+  <!-- APP_CSS -->
+</head>
+<body>
+  <main class="workbench">
+    <header class="masthead">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">E<span>↗</span></span><div><p class="eyebrow">EPASS / SERVICE INTERFACE</p><h1>BMC 调试台<span class="revision">C3 ↔ D1s</span></h1></div></div>
+      <div class="connection"><span id="connectionState" class="connection-state">未连接</span><button id="connectBtn" class="primary">连接蓝牙设备 <span aria-hidden="true">↗</span></button><button id="disconnectBtn" data-connected disabled>断开</button></div>
+    </header>
+
+    <div class="device-strip"><div><span class="micro-label">DEVICE</span><strong id="deviceName">等待 EPASS-BMC</strong><span id="deviceId" class="muted">—</span></div><span class="transport-label">WEB BLUETOOTH <i aria-hidden="true"></i> LOCAL SESSION</span></div>
+    <p id="capabilityNotice" class="notice warning" hidden></p>
+    <div id="notice" class="notice" role="status" aria-live="polite">连接 EPASS-BMC，查看启动日志并访问 APP 终端。</div>
+
+    <section class="telemetry" aria-label="设备状态">
+      <div class="metric"><span>启动选择</span><strong id="modeValue">—</strong></div>
+      <div class="metric"><span>调试复位请求</span><strong id="resetValue">—</strong></div>
+      <div class="metric"><span>SPI 仿真</span><strong id="spiValue">—</strong></div>
+      <div class="metric"><span>读取页数</span><strong id="pagesValue">—</strong></div>
+      <div class="metric"><span>缓存读取</span><strong id="cacheValue">—</strong></div>
+      <div class="metric"><span>异常事务</span><strong id="unexpectedValue">—</strong></div>
+      <div class="metric"><span>UART 字节</span><strong id="uartCountValue">—</strong></div>
+      <div class="metric"><span>UART丢字节 / BLE错误</span><strong id="droppedValue">—</strong></div>
+      <div class="refresh-state"><button id="refreshBtn" data-connected disabled aria-label="刷新设备状态">↻ 刷新</button><time id="updatedAt">尚未更新</time></div>
+    </section>
+
+    <section class="runtime-panel" aria-labelledby="runtimeHeading">
+      <div class="panel-heading"><div><p class="section-number">RUNTIME / POWER</p><h2 id="runtimeHeading">APP 电源生命周期</h2></div><span id="powerSupport" class="muted">等待设备查询</span></div>
+      <div class="runtime-grid">
+        <div class="metric"><span>APP 状态</span><strong id="powerStateValue">—</strong></div>
+        <div class="metric"><span>READY 授权</span><strong id="armedValue">—</strong></div>
+        <div class="metric"><span>主系统供电</span><strong id="mainsysValue">—</strong></div>
+        <div class="metric"><span>启动代次 / 尝试次数</span><strong id="epochValue">—</strong></div>
+        <div class="metric"><span>按键 GPIO / 电平</span><strong id="keyValue">—</strong></div>
+        <div class="metric"><span>按键去抖 / 已释放 / 边沿</span><strong id="keyDetailValue">—</strong></div>
+      </div>
+      <p class="panel-note">APP 上报 READY 后才获得关机授权；长按 5 秒强制关机，关机后短按启动。“调试复位请求”仅反映调试模块记录，实际供电请看主系统供电。电池电压、估算电量与充电状态暂未开放 BLE 查询，请查看 BMC 日志。</p>
+    </section>
+
+    <details class="diagnostics">
+      <summary>SPI / 内存 / 更新通道诊断</summary>
+      <div class="diagnostic-grid">
+        <div><h2>控制器</h2><dl><dt>缓存未命中</dt><dd id="cacheMissValue">—</dd><dt>SPI 队列</dt><dd id="queueValue">—</dd><dt>空闲内存 / 最大连续块</dt><dd id="heapValue">—</dd><dt>C3 复位原因（原始值）</dt><dd id="resetReasonValue">—</dd><dt>BMC 日志字节</dt><dd id="logCountValue">—</dd></dl></div>
+        <div><h2>OTA 事务</h2><p id="otaSupport" class="muted">等待设备查询</p><dl><dt>待完成 / 请求中</dt><dd id="otaPendingValue">—</dd><dt>阶段 / 状态</dt><dd id="otaStateValue">—</dd><dt>会话 / 已确认序号</dt><dd id="otaSessionValue">—</dd><dt>已接收 / 已持久化</dt><dd id="otaBytesValue">—</dd><dt>错误码</dt><dd id="otaErrorValue">—</dd></dl></div>
+        <div><h2>Wi-Fi 通道</h2><p id="wifiSupport" class="muted">等待设备查询</p><dl><dt>模式 / 状态</dt><dd id="wifiStateValue">—</dd><dt>SSID</dt><dd id="wifiSsidValue">—</dd><dt>IP 地址</dt><dd id="wifiIpValue">—</dd><dt>错误码</dt><dd id="wifiErrorValue">—</dd></dl><button id="openOtaBtn" type="button">打开固件更新页 ↗</button><p class="panel-note">跳转时释放本页 BLE 连接，在更新页重新连接；Wi-Fi 配置与镜像上传均在更新页完成。</p></div>
+      </div>
+    </details>
+
+    <div class="workspace-grid">
+      <aside class="control-rail" aria-label="设备控制">
+        <section class="control-section"><p class="section-number">01 / CONTROL</p><h2>APP 控制</h2><p class="section-caption">D1s 启动与复位</p><div class="rail-buttons"><button data-command="boot" data-connected disabled><span>启动 APP</span><span aria-hidden="true">▷</span></button><button data-command="reset" data-connected disabled><span>复位 APP</span><span aria-hidden="true">↻</span></button><button data-command="hold" data-connected disabled><span>保持复位</span><span aria-hidden="true">Ⅱ</span></button><button data-command="fel" data-connected disabled><span>进入 FEL</span><span aria-hidden="true">↳</span></button></div></section>
+        <section class="control-section recovery-section"><p class="section-number">02 / RECOVERY</p><h2>下载与救援</h2><p class="section-caption">执行后 BLE 可能断开</p><div class="rail-buttons"><button class="recovery" data-recovery="c3-download" data-connected disabled> C3 下载模式 <span aria-hidden="true">↗</span></button><button class="recovery" data-recovery="rescue-download" data-connected disabled> FEL + C3 下载 <span aria-hidden="true">↗</span></button></div><p class="rail-note">恢复操作前显示接续命令。网页无法加载 uopbridge，需在电脑终端完成。</p></section>
+        <section class="control-section trace-section"><p class="section-number">03 / TRACE</p><label class="toggle-label" for="traceToggle"><span>SPI 事务跟踪</span><input type="checkbox" id="traceToggle" data-connected disabled><span class="toggle" aria-hidden="true"></span></label><p class="rail-note" id="traceState">设备不回报开关状态；切换后生效。</p><button id="readTraceBtn" data-connected disabled>读取事务记录</button></section>
+      </aside>
+
+      <div class="console-area">
+        <div class="terminal-grid">
+          <section class="terminal-panel" aria-labelledby="appHeading">
+            <header class="terminal-heading"><div><span class="channel">UART / 01</span><h2 id="appHeading">APP 终端 <span>D1s</span></h2></div><span class="byte-count" id="appBytes">0 B</span></header>
+            <div class="terminal-toolbar"><div><button data-replay="app" data-connected disabled>回放</button><button data-clear="app">清空</button><button data-save="app">保存</button></div><button data-follow="app" aria-pressed="true">跟随 ↓</button></div>
+            <div class="terminal-stage"><div id="appTerminal" class="terminal-mount" aria-label="APP 串口终端"></div><div class="terminal-empty" id="appEmpty"><span class="empty-glyph" aria-hidden="true">&gt;_</span><strong>等待 APP 输出</strong><p>连接后接收 D1s 串口日志<br>点击终端可直接输入</p></div></div>
+            <form id="commandForm" class="command-line"><span aria-hidden="true">❯</span><label class="sr-only" for="commandInput">APP shell 命令</label><input id="commandInput" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="APP shell 命令" data-connected disabled><button id="sendBtn" data-connected disabled>发送 ↵</button></form>
+            <div class="key-strip" aria-label="终端快捷键"><span>SEND KEY</span><button data-key="ctrl-c" data-connected disabled>Ctrl C</button><button data-key="ctrl-d" data-connected disabled>Ctrl D</button><button data-key="tab" data-connected disabled>Tab</button><button data-key="escape" data-connected disabled>Esc</button><button data-key="enter" data-connected disabled>Enter</button></div>
+          </section>
+          <section class="terminal-panel" aria-labelledby="bmcHeading">
+            <header class="terminal-heading"><div><span class="channel">BLE / 02</span><h2 id="bmcHeading">BMC 日志 <span>ESP32-C3</span></h2></div><span class="byte-count" id="bmcBytes">0 B</span></header>
+            <div class="terminal-toolbar"><div><button data-replay="bmc" data-connected disabled>回放</button><button data-clear="bmc">清空</button><button data-save="bmc">保存</button></div><button data-follow="bmc" aria-pressed="true">跟随 ↓</button></div>
+            <div class="terminal-stage"><div id="bmcTerminal" class="terminal-mount" aria-label="BMC 日志终端"></div><div class="terminal-empty" id="bmcEmpty"><span class="empty-glyph" aria-hidden="true">[ : ]</span><strong>等待 BMC 输出</strong><p>控制器运行与 SPI 启动日志<br>可回放设备缓存</p></div></div>
+            <div class="bmc-footnote"><span class="small-dot" aria-hidden="true"></span>日志通过 BLE 接收<span class="muted">READ ONLY</span></div>
+          </section>
+        </div>
+        <details class="trace-output" id="traceDetails"><summary>SPI 事务记录 <span id="traceCount">尚未读取</span></summary><p class="panel-note">最多 256 条。列：序号、CPU cycles（十六进制）、位数、RX / TX（十六进制）。读取期间暂停自动刷新。</p><pre id="traceOutput">等待读取</pre></details>
+        <section class="events-panel" aria-label="会话事件"><div class="events-heading"><h2>会话事件</h2><span>SESSION EVENTS</span></div><ul id="events" aria-live="polite"><li class="muted">尚无会话事件</li></ul></section>
+      </div>
+    </div>
+
+    <footer><span>EPASS <b>/</b> 本地调试接口</span><span>BLE 单连接 · 日志缓存在本页内存，刷新后清除</span></footer>
+    <details class="help"><summary>连接帮助与操作说明 <span aria-hidden="true">＋</span></summary><div><p>使用支持 Web Bluetooth 的 Chrome / Edge，并从 localhost 或 HTTPS 打开本页。Linux 上可能需要启用 <code>chrome://flags/#enable-experimental-web-platform-features</code>，重启浏览器后再连接。</p><p>每次只允许一个 BLE 客户端连接。若连接失败，请先断开手机或其他调试工具。日志“回放”读取设备侧已有缓存；“保存”导出当前页面收到的日志。</p><p>APP 终端通过 BMC 转发 UART 输入。D1s 处于复位或 FEL 状态时不会提供 Linux shell。“进入 FEL”控制启动路径，不会自动给空 NAND 写入固件。</p><p>C3 下载和救援操作会改变设备状态。网页只通过 BLE 请求切换模式，无法执行 xfel、加载 uopbridge 或调用 esptool；后续操作请使用电脑终端。</p></div></details>
+  </main>
+
+  <dialog id="recoveryDialog" aria-labelledby="recoveryTitle" aria-describedby="recoveryText"><div class="dialog-kicker">RECOVERY / MODE SWITCH</div><h2 id="recoveryTitle">切换下载模式</h2><p id="recoveryText"></p><div class="recovery-command-heading"><span>电脑终端接续命令</span><button id="copyRecoveryBtn" type="button">复制命令</button></div><pre><code id="recoveryCommand"></code></pre><p class="dialog-note">确认后网页向 C3 发送模式切换命令。BLE 可能断开；请在电脑终端执行后续命令。</p><div class="dialog-actions"><button id="recoveryCancel" type="button">取消</button><button id="recoveryConfirm" class="recovery" type="button">确认切换</button></div></dialog>
+  <!-- XTERM_JS -->
+  <!-- FIT_JS -->
+  <!-- APP_JS -->
+</body>
+</html>

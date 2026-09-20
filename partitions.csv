@@ -1,0 +1,11 @@
+# Name,   Type, SubType, Offset,  Size, Flags
+# ESP32-C3 / 4MB
+# d1s_spl: 保持 512K 分区；前 2×128K 保存正常 SPL，后 256K 留空
+# 两个槽共用正常启动/外部 FIT 更新路径，不存专用救援 SPL 或 U-Boot
+nvs,      data, nvs,     0x9000,  0x6000,
+otadata,  data, ota,     0xf000,  0x2000,
+phy_init, data, phy,     0x11000, 0x1000,
+ota_0,    app,  ota_0,   0x20000, 0x180000,
+ota_1,    app,  ota_1,   0x1A0000,0x180000,
+d1s_spl,  data, 0x40,    0x320000,0x80000,
+storage,  data, spiffs,  0x3A0000,0x60000,

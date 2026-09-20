@@ -1,0 +1,13 @@
+[project]
+name = "epass-bmc-tools"
+version = "0.1.0"
+description = "EPASS BMC BLE 调试与 OTA 上位机工具（bleak）"
+requires-python = ">=3.10"
+dependencies = [
+    "bleak>=0.22",
+]
+
+[dependency-groups]
+web = [
+    "playwright>=1.40",
+]

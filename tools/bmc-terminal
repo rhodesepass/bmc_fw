@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+tools_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+if [ -n "${BMC_ADDRESS:-}" ]; then
+    set -- --address "$BMC_ADDRESS" terminal "$@"
+else
+    set -- terminal "$@"
+fi
+exec uv run --project "$tools_dir" python "$tools_dir/bmc_ble.py" "$@"
