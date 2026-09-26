@@ -2,6 +2,7 @@
 #include "spl_nand.h"
 #include "bmc_debug.h"
 #include "bmc_power.h"
+#include "bmc_pm.h"
 #include "bmc_sleep.h"
 #include "bmc_runtime.h"
 #include "bmc_ota.h"
@@ -39,6 +40,7 @@ void app_main(void)
     brownout_ll_intr_clear();
 #endif
     ESP_ERROR_CHECK(esp_task_wdt_add(NULL));
+    ESP_ERROR_CHECK(bmc_pm_init());
     bmc_sleep_boot();
     esp_err_t charger_err = bq25601_init();
     if (charger_err != ESP_OK)

@@ -11,6 +11,7 @@
 #include <string.h>
 #include "driver/uart.h"
 #include "bmc_runtime.h"
+#include "bmc_pm.h"
 #include "bmc_power.h"
 #include "bmc_sleep.h"
 #include "esp_check.h"
@@ -161,6 +162,10 @@ static esp_err_t run_command(const char *request, char *response, size_t capacit
         snprintf(response, capacity, "BMC image committed; use ota-reboot");
         return ESP_ERR_INVALID_STATE;
     }
+    if (!strcmp(request, "pm-status") || !strncmp(request, "pm ", 3))
+        return bmc_pm_command(request, response, capacity);
+    if (!strcmp(request, "ble-adv-status") || !strncmp(request, "ble-adv ", 8))
+        return ble_debug_adv_command(request, response, capacity);
     if (!strcmp(request, "charger-status")) {
         bq25601_config_t c;
         bq25601_status_t s;
@@ -405,7 +410,7 @@ esp_err_t bmc_debug_init(void)
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-        .source_clk = UART_SCLK_DEFAULT,
+        .source_clk = UART_SCLK_XTAL,
     };
     ESP_RETURN_ON_ERROR(uart_driver_install(UART_NUM_0, 4096, 0, 0, NULL, 0), TAG, "UART driver");
     ESP_RETURN_ON_ERROR(uart_param_config(UART_NUM_0, &uart), TAG, "UART config");
@@ -422,6 +427,7 @@ esp_err_t bmc_debug_init(void)
     esp_err_t ble_error = ble_debug_init(&callbacks);
     log_heap("after BLE");
     ESP_RETURN_ON_ERROR(ble_error, TAG, "BLE");
+    ESP_RETURN_ON_ERROR(bmc_pm_radio_ready(), TAG, "BLE power management");
     if (xTaskCreate(debug_task, "bmc_uart", 4096, NULL, 5, NULL) != pdPASS)
         return ESP_ERR_NO_MEM;
     ESP_LOGI(TAG, "BLE debug ready; D1s UART capture armed");

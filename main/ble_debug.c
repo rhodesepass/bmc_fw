@@ -29,6 +29,8 @@ static uint8_t own_addr_type;
 static portMUX_TYPE state_lock = portMUX_INITIALIZER_UNLOCKED;
 static uint16_t connection = BLE_HS_CONN_HANDLE_NONE, mtu = 23;
 static bool uart_notify, log_notify, command_busy;
+static bool slow_advertising;
+static uint16_t applied_adv_min, applied_adv_max;
 static uint32_t dropped;
 static char control_response[512] = "OK ready";
 static ble_debug_callbacks_t callbacks;
@@ -59,7 +61,43 @@ static void advertise(void)
         .conn_mode = BLE_GAP_CONN_MODE_UND,
         .disc_mode = BLE_GAP_DISC_MODE_GEN,
     };
-    ble_gap_adv_start(own_addr_type, NULL, BLE_HS_FOREVER, &params, gap_event, NULL);
+    portENTER_CRITICAL(&state_lock);
+    bool slow = slow_advertising;
+    portEXIT_CRITICAL(&state_lock);
+    params.itvl_min = slow ? BLE_GAP_ADV_ITVL_MS(250) : BLE_GAP_ADV_FAST_INTERVAL1_MIN;
+    params.itvl_max = slow ? BLE_GAP_ADV_ITVL_MS(500) : BLE_GAP_ADV_FAST_INTERVAL1_MAX;
+    if (!ble_gap_adv_start(own_addr_type, NULL, BLE_HS_FOREVER, &params, gap_event, NULL)) {
+        portENTER_CRITICAL(&state_lock);
+        applied_adv_min = params.itvl_min;
+        applied_adv_max = params.itvl_max;
+        portEXIT_CRITICAL(&state_lock);
+    }
+}
+
+esp_err_t ble_debug_adv_command(const char *request, char *response, size_t capacity)
+{
+    bool change = strcmp(request, "ble-adv-status") != 0;
+    bool slow = !strcmp(request, "ble-adv slow");
+    if (change && !slow && strcmp(request, "ble-adv fast")) {
+        snprintf(response, capacity, "use ble-adv fast|slow or ble-adv-status");
+        return ESP_ERR_INVALID_ARG;
+    }
+    portENTER_CRITICAL(&state_lock);
+    if (change) slow_advertising = slow;
+    slow = slow_advertising;
+    uint16_t applied_min = applied_adv_min, applied_max = applied_adv_max;
+    bool connected = connection != BLE_HS_CONN_HANDLE_NONE;
+    portEXIT_CRITICAL(&state_lock);
+    unsigned next_min = slow ? BLE_GAP_ADV_ITVL_MS(250) : BLE_GAP_ADV_FAST_INTERVAL1_MIN;
+    unsigned next_max = slow ? BLE_GAP_ADV_ITVL_MS(500) : BLE_GAP_ADV_FAST_INTERVAL1_MAX;
+    bool advertising = ble_gap_adv_active();
+    snprintf(response, capacity,
+             "mode=%s connected=%d advertising=%d active_min_us=%u active_max_us=%u next_min_us=%u next_max_us=%u pending=%d apply=next_advertise",
+             slow ? "slow" : "fast", connected, advertising,
+             advertising ? applied_min * 625u : 0, advertising ? applied_max * 625u : 0,
+             next_min * 625u, next_max * 625u,
+             applied_min != next_min || applied_max != next_max);
+    return ESP_OK;
 }
 
 static void reset_state(void)

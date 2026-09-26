@@ -109,6 +109,7 @@ static BaseType_t xQueueSendFromISR(QueueHandle_t queue, const void *data, BaseT
     memcpy(queue->data[(queue->head + queue->count++) % 2], data, 2052);
     return pdTRUE;
 }
+static void (*receive_hook)(void);
 static BaseType_t xQueueReceive(QueueHandle_t queue, void *data, unsigned timeout)
 {
     (void)timeout;
@@ -116,6 +117,7 @@ static BaseType_t xQueueReceive(QueueHandle_t queue, void *data, unsigned timeou
     memcpy(data, queue->data[queue->head], 2052);
     queue->head = (queue->head + 1) % 2;
     queue->count--;
+    if (receive_hook) receive_hook();
     return pdTRUE;
 }
 static uint32_t esp_rom_crc32_le(uint32_t crc, const uint8_t *data, uint32_t length)

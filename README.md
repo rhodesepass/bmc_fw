@@ -108,6 +108,40 @@ uv run --project tools python tools/bmc_ota.py --address <BLE地址> bmc build/e
 bootloader 和应用的 RTC 保留配置必须一致，见
 [恢复组件](bootloader_components/bmc_rescue/README.md)。
 
+## 运行功耗与实验接口
+
+运行态默认使用 `modem`：BLE 事件间 modem sleep，CPU 固定 160 MHz。
+SPI/GDMA 的 APB 保持 80 MHz；BootROM 启动至收到有效 APP READY 期间锁定
+CPU 160 MHz。UART 使用 XTAL 时钟，所有模式均禁用 light sleep，因为 APP
+SPI 请求和 UART 字节没有提前唤醒握手。BLE 低功耗时钟使用主晶振，不依赖外部 32 kHz。
+
+可通过 BLE 或 HTTP 控制接口进行同一固件的功耗 A/B：
+
+```sh
+uv run --project tools python tools/bmc_ble.py --address <BLE地址> pm performance
+uv run --project tools python tools/bmc_ble.py --address <BLE地址> pm modem
+uv run --project tools python tools/bmc_ble.py --address <BLE地址> pm balanced
+uv run --project tools python tools/bmc_ble.py --address <BLE地址> pm-status
+```
+
+`performance` 为 CPU 160 MHz、BLE modem sleep 关闭；`modem` 仅开启 BLE
+modem sleep；`balanced` 再允许 CPU 空闲降频。模式不写入 NVS，重启恢复
+`modem`。`pm-status` 中 `cpu_mhz` 是处理查询当时的频率，不是空闲占比。
+每次切换后等稳定再用独立电池端仪表测量，固件配置本身不代表节电实测。
+
+无连接时默认采用 NimBLE 原始快广播间隔（当前配置为 30–60 ms）。
+`ble-adv fast` 恢复默认，`ble-adv slow` 尝试 250–500 ms 慢广播；均在下一次
+开始广播时应用，连接中设置后断开即可，不会停止 BLE host 或打断 OTA。
+`ble-adv-status` 报告实际已启动广播的间隔和下次间隔，单位为微秒；连接中
+`advertising=0`、`active_min_us=0`、`active_max_us=0`。该开关与 PM 档位独立，
+不写入 NVS。通过 HTTP 在正在广播时修改也仅设置下一次广播的间隔。
+
+本轮同素材实验中，modem sleep 观察到约 74 mW 的主要收益；DFS 另有约
+8 mW、慢广播另有约 13 mW 的观察差。但最终试验固件出现一次尚未归因的
+INT_WDT，慢广播阶段还发生多次 20 秒重连超时。因此默认舍弃 DFS 和慢广播
+的小收益，优先保持运行与重连表现，实验命令继续保留。此默认调整不代表
+已查明或修复看门狗问题，稳定性仍以保守固件的板上复测为准。
+
 ## 测试
 
 ```sh

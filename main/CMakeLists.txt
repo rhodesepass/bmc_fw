@@ -5,6 +5,7 @@ idf_component_register(
         "bmc_ota.c"
         "app_ota_wire.c"
         "bmc_power.c"
+        "bmc_pm.c"
         "bmc_sleep.c"
         "bmc_runtime.c"
         "bmc_lifecycle.c"
@@ -29,6 +30,7 @@ idf_component_register(
         esp_wifi
         nvs_flash
         esp_timer
+        esp_pm
         esp_app_format
         bootloader_support
         esp_driver_uart

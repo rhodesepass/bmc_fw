@@ -13,6 +13,7 @@ typedef struct {
 /* Initialize NVS before this function. Callbacks run on a dedicated worker task. */
 esp_err_t ble_debug_init(const ble_debug_callbacks_t *callbacks);
 esp_err_t ble_debug_stop(void);
+esp_err_t ble_debug_adv_command(const char *request, char *response, size_t capacity);
 esp_err_t ble_debug_publish_uart(const uint8_t *data, size_t len);
 esp_err_t ble_debug_publish_log(const uint8_t *data, size_t len);
 bool ble_debug_connected(void);

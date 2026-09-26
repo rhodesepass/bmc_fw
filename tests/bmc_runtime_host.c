@@ -3,7 +3,10 @@
 #include "../main/bmc_runtime.c"
 
 bool bmc_mainsys_enabled(void) { return mainsys; }
-void bmc_recovery_mark_app_ready(void) {}
+static bool boot_performance;
+esp_err_t bmc_pm_boot(bool active) { boot_performance = active; return ESP_OK; }
+static unsigned ready_marks;
+void bmc_recovery_mark_app_ready(void) { ready_marks++; }
 static unsigned rescue_requests;
 void bmc_recovery_request_rescue(void) { rescue_requests++; }
 unsigned bmc_recovery_boot_attempts(void) { return 0; }
@@ -124,6 +127,7 @@ static void test_protocol(void)
     assert(response[5] == 2 && !cuts && !lifecycle.shutdown_at);
     transact(2, lifecycle.epoch - 1);
     assert(response[5] == 1 && !lifecycle.armed);
+    assert(boot_performance);
     for (unsigned field = 0; field < 6; field++) {
         uint32_t previous = published[2];
         make_frame(2, lifecycle.epoch);
@@ -150,8 +154,10 @@ static void test_protocol(void)
 static void test_shutdown_and_reset(void)
 {
     fresh();
+    assert(boot_performance);
     transact(2, lifecycle.epoch);
     assert(lifecycle.armed && response[6] == 1);
+    assert(!boot_performance);
     transact(3, lifecycle.epoch);
     uint64_t deadline = lifecycle.shutdown_at;
     assert(deadline == (uint64_t)(fake_us / 1000) + 300);
@@ -169,7 +175,6 @@ static void test_shutdown_and_reset(void)
     advance(10000);
     assert(cuts == 1 && !boots);
     release();
-    assert(bmc_runtime_can_sleep());
     press();
     assert(boots == 1 && mainsys && !fake_core && !lifecycle.armed);
     assert(uart_direction == GPIO_MODE_OUTPUT && miso_direction == GPIO_MODE_INPUT_OUTPUT);
@@ -190,8 +195,25 @@ static void test_shutdown_and_reset(void)
     transact(3, lifecycle.epoch);
     epoch = lifecycle.epoch;
     bmc_runtime_boot_seen();
+    assert(boot_performance);
     advance(300);
     assert(!cuts && !lifecycle.armed && !lifecycle.shutdown_at && lifecycle.epoch != epoch);
+}
+
+static void test_reset_during_ready(void)
+{
+    fresh();
+    transact(2, lifecycle.epoch);
+    assert(!boot_performance);
+    unsigned previous_marks = ready_marks;
+    receive_hook = bmc_runtime_boot_seen;
+    transact(2, lifecycle.epoch);
+    receive_hook = NULL;
+    assert(boot_seen && boot_performance && ready_marks == previous_marks);
+    advance(20);
+    assert(!lifecycle.armed && boot_performance);
+    transact(2, lifecycle.epoch);
+    assert(lifecycle.armed && !boot_performance && ready_marks == previous_marks + 1);
 }
 
 static void test_button(void)
@@ -299,6 +321,7 @@ int main(void)
 {
     test_protocol();
     test_shutdown_and_reset();
+    test_reset_during_ready();
     test_button();
     test_protected_rescue();
     test_failed_cut();

@@ -15,11 +15,14 @@ UART_RX = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
 UART_TX = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"
 CONTROL = "6e400004-b5a3-f393-e0a9-e50e24dcca9e"
 LOG = "6e400005-b5a3-f393-e0a9-e50e24dcca9e"
-COMMANDS = ("trace-on", "trace-off", "status", "power-status", "charger-status", "hold", "reset", "fel", "c3-download", "rescue-download", "boot", "uart-replay", "log-replay")
+COMMANDS = ("trace-on", "trace-off", "status", "power-status", "charger-status", "pm-status", "ble-adv-status", "hold", "reset", "fel", "c3-download", "rescue-download", "boot", "uart-replay", "log-replay")
+PM_MODES = ("performance", "modem", "balanced")
 
 
 async def command(client, request, timeout=5.0):
-    if request not in COMMANDS and not (request.startswith("trace ") and request[6:].isdigit()):
+    if (request not in COMMANDS and request not in tuple(f"pm {mode}" for mode in PM_MODES)
+            and request not in ("ble-adv fast", "ble-adv slow")
+            and not (request.startswith("trace ") and request[6:].isdigit())):
         raise ValueError(f"unsupported command: {request}")
     # A successful ATT write confirms queuing; the worker reports completion by read.
     await client.write_gatt_char(CONTROL, request.encode("ascii"), response=True)
@@ -231,6 +234,10 @@ async def main_async(args):
             await prepare_download(client, args)
         elif args.action in COMMANDS:
             print(await command(client, args.action))
+        elif args.action == "pm":
+            print(await command(client, f"pm {args.mode}"))
+        elif args.action == "ble-adv":
+            print(await command(client, f"ble-adv {args.mode}"))
         else:
             await stream(client, args.action, replay=not args.no_replay, duration=args.duration, output=args.output)
 
@@ -249,6 +256,10 @@ def parse_args(argv=None):
     trace = sub.add_parser("trace")
     trace.add_argument("--start", type=int, default=0)
     trace.add_argument("--count", type=int, default=256)
+    pm = sub.add_parser("pm", help="Change BMC runtime power mode without rebooting")
+    pm.add_argument("mode", choices=PM_MODES)
+    advertising = sub.add_parser("ble-adv", help="Set advertising interval for the next disconnect")
+    advertising.add_argument("mode", choices=("fast", "slow"))
     for name in COMMANDS:
         if name != "rescue-download":
             sub.add_parser(name)

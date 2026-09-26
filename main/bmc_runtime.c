@@ -2,6 +2,7 @@
 #include "bmc_lifecycle.h"
 #include "bmc_recovery.h"
 #include "bmc_power.h"
+#include "bmc_pm.h"
 #include "board_pins.h"
 #include "spl_nand.h"
 #include "app_ota.h"
@@ -49,6 +50,7 @@ void bmc_runtime_battery(const bat_gauge_snapshot_t *snapshot)
 
 void bmc_runtime_reset(void)
 {
+    bmc_pm_boot(true);
     if (!incoming) return;
     uint32_t epoch = esp_random();
     if (!epoch || epoch == lifecycle.epoch) epoch = lifecycle.epoch + 1;
@@ -63,6 +65,7 @@ void bmc_runtime_reset(void)
 
 void IRAM_ATTR bmc_runtime_boot_seen(void)
 {
+    bmc_pm_boot(true);
     portENTER_CRITICAL_ISR(&wire_lock);
     boot_seen = true;
     portEXIT_CRITICAL_ISR(&wire_lock);
@@ -103,7 +106,15 @@ static void receive(uint64_t now)
     if (!reply) return;
     bool was_armed = lifecycle.armed;
     unsigned result = bmc_lifecycle_request(&lifecycle, request[3], request[4], now);
-    if (!result && request[3] == 2) bmc_recovery_mark_app_ready();
+    if (!result && request[3] == 2) {
+        /* A reset IRQ can invalidate this READY before its handler finishes. */
+        portENTER_CRITICAL(&wire_lock);
+        if (!boot_seen) {
+            bmc_recovery_mark_app_ready();
+            bmc_pm_boot(false);
+        }
+        portEXIT_CRITICAL(&wire_lock);
+    }
     if (!was_armed && lifecycle.armed && key_stable) lifecycle.released = false;
     bat_gauge_snapshot_t snapshot;
     int64_t sampled;
