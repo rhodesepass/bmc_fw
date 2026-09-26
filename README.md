@@ -145,9 +145,29 @@ INT_WDT，慢广播阶段还发生多次 20 秒重连超时。因此默认舍弃
 ## 测试
 
 ```sh
-python3 -m unittest discover -s tests
+uv run --project tools python -m unittest discover -s tests -p 'test_*.py'
 python3 bootloader_components/bmc_rescue/tests/test_rescue.py
 ```
 
 主机测试中的 BLE/HTTP/寄存器模拟不替代实板验证。可选的 FEL/uopbridge 恢复
 下载需要另行提供 uopbridge，并通过工具的 `--uopbridge` 指定路径。
+
+## Buildroot 集成与提交顺序
+
+本仓库、`rhodesepass/tp_fw` 与 `rhodesepass/buildroot-next` 是独立仓库。
+Buildroot 的 `epass-bmc-firmware` 拉取本仓库的 `origin/master`，使用独立的
+ESP-IDF 6.0.2 环境；本地未提交或未推送的修改不会进入远端包构建。
+先提交并发布固件，再发布依赖它的 Buildroot 集成；协议改动还需同步 Buildroot
+内的 OTA 客户端。固件源码继续跟随分支，不把包版本改为固定提交。
+
+在 Buildroot 目录刷新缓存后，按顺序执行：
+
+```sh
+rm -f dl/epass-bmc-firmware/epass-bmc-firmware-origin_master-git4.tar.gz
+make epass-bmc-firmware-dirclean
+make epass-bmc-firmware
+```
+
+自定义 `BR2_DL_DIR` 时调整缓存路径。`origin/master` 是下载引用，`br-master`
+是构建版本标签，都不能证明具体源码提交；镜像以发布清单的 SHA256 核验。
+首次部署深睡功能仍须升级配套 bootloader，单独应用 OTA 不会完成此步骤。
