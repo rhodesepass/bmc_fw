@@ -8,6 +8,7 @@
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_task_wdt.h"
+#include "hal/brownout_ll.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -29,6 +30,13 @@ static void chrg_irq_gpio_init(void)
 
 void app_main(void)
 {
+#if !CONFIG_ESP_BROWNOUT_DET
+    /* C3 bootloader enables analog brownout reset independently of this option. */
+    brownout_ll_intr_enable(false);
+    brownout_ll_bod_enable(false);
+    brownout_ll_ana_reset_enable(false);
+    brownout_ll_intr_clear();
+#endif
     ESP_ERROR_CHECK(esp_task_wdt_add(NULL));
     esp_err_t charger_err = bq25601_init();
     if (charger_err != ESP_OK)
@@ -57,6 +65,12 @@ void app_main(void)
         ESP_LOGE(TAG, "SPL NAND: %s; D1s held in reset", esp_err_to_name(boot_err));
 #endif
 
+#if !CONFIG_ESP_BROWNOUT_DET
+    ESP_LOGI(TAG, "brownout disabled: detector=%u analog_reset=%u interrupt=%u",
+             (unsigned)RTCCNTL.brown_out.ena,
+             (unsigned)RTCCNTL.brown_out.ana_rst_en,
+             (unsigned)RTCCNTL.int_ena.rtc_brown_out);
+#endif
     vTaskDelay(pdMS_TO_TICKS(100));
     chrg_irq_gpio_init();
 
