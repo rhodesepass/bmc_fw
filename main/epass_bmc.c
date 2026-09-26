@@ -30,6 +30,9 @@ static void chrg_irq_gpio_init(void)
 void app_main(void)
 {
     ESP_ERROR_CHECK(esp_task_wdt_add(NULL));
+    esp_err_t charger_err = bq25601_init();
+    if (charger_err != ESP_OK)
+        ESP_LOGE(TAG, "charger configuration: %s", esp_err_to_name(charger_err));
     ESP_LOGI(TAG, "BMC bring-up: battery gauge");
     esp_err_t power_err = bmc_power_init();
     if (power_err != ESP_OK)
@@ -68,6 +71,9 @@ void app_main(void)
 #endif
     ESP_ERROR_CHECK(esp_task_wdt_reset());
     while (1) {
+        charger_err = bq25601_poll();
+        if (charger_err != ESP_OK)
+            ESP_LOGE(TAG, "charger verification: %s", esp_err_to_name(charger_err));
         bmc_ota_poll();
         ESP_ERROR_CHECK(esp_task_wdt_reset());
 #if CONFIG_BMC_SPL_NAND
@@ -90,7 +96,7 @@ void app_main(void)
         if (err == ESP_OK && s.valid) {
             int irq = gpio_get_level(BMC_PIN_CHRG_IRQ);
             ESP_LOGI(TAG,
-                     "bat %lumV (filt %lu) soc=%d%% %s | vbus=%s chg=%s pg=%d fault=0x%02x irq=%d",
+                     "bat %lumV (filt %lu) soc=%d%% %s | vbus=%s chg=%s pg=%d fault=0x%02x latched=0x%02x irq=%d",
                      (unsigned long)s.vbat_mv,
                      (unsigned long)s.vbat_filt_mv,
                      s.soc_pct,
@@ -99,6 +105,7 @@ void app_main(void)
                      bq25601_chg_str(s.chg.chg),
                      (int)s.chg.power_good,
                      s.chg.fault,
+                     s.chg.fault_latched,
                      irq);
         } else {
             ESP_LOGW(TAG, "gauge update failed: %s", esp_err_to_name(err));

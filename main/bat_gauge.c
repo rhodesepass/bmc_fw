@@ -93,7 +93,6 @@ static int settle_soc(int prev, int now)
 esp_err_t bat_gauge_init(void)
 {
     ESP_RETURN_ON_ERROR(bat_adc_init(), TAG, "adc");
-    ESP_RETURN_ON_ERROR(bq25601_init(), TAG, "bq");
 
     uint32_t mv = 0;
     if (bat_adc_read_mv(&mv) == ESP_OK) {

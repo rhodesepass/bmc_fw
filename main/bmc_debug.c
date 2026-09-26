@@ -5,6 +5,7 @@
 #include "app_ota.h"
 #include "bmc_ota.h"
 #include "bmc_link.h"
+#include "bq25601.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -140,15 +141,31 @@ static esp_err_t run_command(const char *request, char *response, size_t capacit
         return err;
     }
     if (self_ota_active && strcmp(request, "status") && strcmp(request, "power-status") &&
-        strcmp(request, "wifi-status") && strcmp(request, "ota-status")) {
+        strcmp(request, "wifi-status") && strcmp(request, "ota-status") && strcmp(request, "charger-status")) {
         snprintf(response, capacity, "BMC firmware update in progress");
         return ESP_ERR_INVALID_STATE;
     }
     if (bmc_ota_committed() && strcmp(request, "status") && strcmp(request, "power-status") &&
-        strcmp(request, "wifi-status") && strcmp(request, "ota-status") &&
+        strcmp(request, "wifi-status") && strcmp(request, "ota-status") && strcmp(request, "charger-status") &&
         strcmp(request, "ota-finish") && strcmp(request, "ota-reboot")) {
         snprintf(response, capacity, "BMC image committed; use ota-reboot");
         return ESP_ERR_INVALID_STATE;
+    }
+    if (!strcmp(request, "charger-status")) {
+        bq25601_config_t c;
+        bq25601_status_t s;
+        err = bq25601_read_config(&c);
+        if (err == ESP_OK) err = bq25601_read_status(&s);
+        if (err != ESP_OK) {
+            snprintf(response, capacity, "charger state unknown: %s", esp_err_to_name(err));
+            return err;
+        }
+        snprintf(response, capacity,
+                 "verified=%d enabled=%d input_ma=%u charge_ma=%u voltage_mv=%u pre_ma=%u term_ma=%u vbus=%s chg=%s pg=%d thermal=%d fault=0x%02x latched=0x%02x",
+                 c.verified, c.enabled, c.input_ma, c.charge_ma, c.voltage_mv,
+                 c.precharge_ma, c.termination_ma, bq25601_vbus_str(s.vbus),
+                 bq25601_chg_str(s.chg), s.power_good, s.therm_regulation, s.fault, s.fault_latched);
+        return ESP_OK;
     }
     if (!strcmp(request, "power-status")) {
         bmc_runtime_status(response, capacity);
@@ -161,7 +178,7 @@ static esp_err_t run_command(const char *request, char *response, size_t capacit
     if (!strncmp(request, "wifi-", 5))
         return bmc_link_command(request, response, capacity);
     if (!strcmp(request, "ota") || !strncmp(request, "ota-", 4)) {
-        if (strcmp(request, "ota-status")) boot_decided = true;
+        if (strcmp(request, "ota-status") && strcmp(request, "charger-status")) boot_decided = true;
         return app_ota_command(request, response, capacity);
     }
     if (app_ota_pending() && (!strcmp(request, "boot") || !strcmp(request, "reset"))) {

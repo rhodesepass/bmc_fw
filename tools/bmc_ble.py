@@ -15,7 +15,7 @@ UART_RX = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
 UART_TX = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"
 CONTROL = "6e400004-b5a3-f393-e0a9-e50e24dcca9e"
 LOG = "6e400005-b5a3-f393-e0a9-e50e24dcca9e"
-COMMANDS = ("trace-on", "trace-off", "status", "power-status", "hold", "reset", "fel", "c3-download", "rescue-download", "boot", "uart-replay", "log-replay")
+COMMANDS = ("trace-on", "trace-off", "status", "power-status", "charger-status", "hold", "reset", "fel", "c3-download", "rescue-download", "boot", "uart-replay", "log-replay")
 
 
 async def command(client, request, timeout=5.0):
