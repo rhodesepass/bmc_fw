@@ -1,5 +1,6 @@
 #include "rescue_stub.h"
 #include "../recovery_state.h"
+#include "../sleep_state.h"
 #include "../../../main/bmc_recovery.h"
 #include <assert.h>
 #include <stdio.h>
@@ -62,6 +63,17 @@ int main(void)
 
     bmc_recovery_mark_app_ready();
     assert(bmc_recovery_boot_attempts() == 0);
+    reset_reason = RESET_REASON_CORE_DEEP_SLEEP;
+    bmc_sleep_retain(retained.custom, true);
+    for (unsigned i = 0; i < 20; ++i) expect_normal_boot();
+    assert(bmc_recovery_boot_attempts() == 0);
+    assert(bmc_sleep_retained(retained.custom));
+    retained.custom[2] ^= 1;
+    expect_normal_boot();
+    assert(bmc_recovery_boot_attempts() == 1);
+    assert(!bmc_sleep_retained(retained.custom));
+    bmc_recovery_mark_app_ready();
+    reset_reason = 12;
     expect_normal_boot();
     assert(bmc_recovery_boot_attempts() == 1);
     button_level = 0;

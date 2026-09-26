@@ -53,6 +53,43 @@ APP 断电时板级供电交接会短暂降低 BMC 电压。当前配置关闭 E
 模拟复位位在正常交接中触发复位。此改动配合现有板级时序使用，不表示低电压下
 所有外设与 Flash 操作均已验证；日志会回读三项开关状态。
 
+## APP 关机与 BMC 深睡
+
+APP READY/epoch 和 Linux poweroff 协议不变。正常关机或五秒强制关机完成后，
+等电源键释放稳定 40 ms，停止 BLE/Wi-Fi 并进入 ESP32-C3 Deep-sleep，
+不保留调试窗口。关机采样周期与无线收尾会带来数秒以内的正常入睡延迟。
+OTA 未完成、BMC 自身升级及救援状态不自动入睡。
+
+GPIO18/19 保持高电平切断 APP 电源；APP_RESET 保持有效，跨域 SPI/UART/IRQ
+置为无上下拉输入并 hold。深睡期间 BLE 不可连接，按电源键才启动 APP。
+GPIO2 充电中断只唤醒最小 I²C/充电维护路径，不启动 APP 或无线。
+GPIO2 持续为低时仅保留按键唤醒，加 60 秒定时重查；恢复为高后重新启用中断。
+充电配置核验失败则保持 APP 断电并重试；新的按键开机请求仍可重新启动 BMC。
+
+bootloader 与应用共享 16 字节 custom RTC 区域：救援计数、休眠标记及反码、
+每次启动的能力标记。充电维护唤醒不增加 APP 未 READY 计数；真实开机重新
+生成 epoch 并等待 READY。原 bootloader 按键救援入口保留。
+`power-status` 增加 `sleep`、`sleep_error`、`wake`（唤醒原因位图）、
+`wake_pins` 和 `sleep_block`；它们是软件状态，不能替代电源波形和功耗测量。
+
+首次启用必须一起部署本次的 `build/bootloader/bootloader.bin` 和
+`build/epass_bmc.bin`。应用 OTA 不会更新 bootloader；检测不到新版 bootloader
+时显示 `sleep=bootloader_required`，保留原来的清醒关机模式。
+使用现有 ROM 烧录链路更新 bootloader 和确认过的应用槽位即可，不需要重分区
+或重置 otadata、SPL 分区。后续仅修改应用时可继续使用现有 OTA。
+
+主机验证：
+
+```sh
+uv run --project tools python -m unittest discover -s tests -p 'test_*.py'
+python3 bootloader_components/bmc_rescue/tests/test_rescue.py
+```
+
+实板验收需另行完成：20 次关机/按键开机、插拔与充满、长按不松手、已连接 BLE
+关机、救援入口；用示波器确认 GPIO18/19 和 APP 电源在充电唤醒期间无上电脉冲，
+检查跨域倒灌。比较电池侧原关机与深睡的稳态电流、唤醒峰值和平均电流。
+固件构建和主机测试不代表这些实测已经通过。
+
 ## 构建与使用
 
 启用 ESP-IDF 6.0.2 环境，使用仓库内完整 `sdkconfig` 直接构建：

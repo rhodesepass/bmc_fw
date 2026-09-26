@@ -17,7 +17,11 @@
 #define CONFIG_BMC_GPIO_SPI_CS 5
 #define CONFIG_BMC_GPIO_SPI_MOSI 6
 #define CONFIG_BMC_GPIO_SPI_MISO 7
+#define CONFIG_BMC_GPIO_UART_RX 20
+#define CONFIG_BMC_GPIO_UART_TX 21
+#define CONFIG_BMC_GPIO_TO_APP_IRQ 10
 #define RESET_REASON_CHIP_POWER_ON 1
+#define RESET_REASON_CORE_DEEP_SLEEP 5
 #define EFUSE_RD_REPEAT_DATA0_REG 0
 #define EFUSE_RD_REPEAT_DATA3_REG 1
 #define EFUSE_DIS_FORCE_DOWNLOAD 1
@@ -71,6 +75,7 @@ static inline void esp_rom_gpio_pad_pullup_only(unsigned pin) { (void)pin; }
 static inline void esp_rom_gpio_connect_out_signal(unsigned pin, unsigned signal, bool out, bool oen) { (void)pin; (void)signal; (void)out; (void)oen; }
 static inline void gpio_ll_set_level(int *hw, unsigned pin, unsigned value) { (void)hw; levels[pin] = value; }
 static inline void gpio_ll_output_enable(int *hw, unsigned pin) { (void)hw; outputs[pin] = 1; }
+static inline void gpio_ll_hold_dis(int *hw, unsigned pin) { (void)hw; (void)pin; }
 static inline void gpio_ll_output_disable(int *hw, unsigned pin) { (void)hw; outputs[pin] = 0; }
 static inline void gpio_ll_input_enable(int *hw, unsigned pin) { (void)hw; (void)pin; }
 static inline void gpio_ll_od_enable(int *hw, unsigned pin) { (void)hw; (void)pin; }

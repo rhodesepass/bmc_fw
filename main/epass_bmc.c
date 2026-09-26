@@ -2,6 +2,7 @@
 #include "spl_nand.h"
 #include "bmc_debug.h"
 #include "bmc_power.h"
+#include "bmc_sleep.h"
 #include "bmc_runtime.h"
 #include "bmc_ota.h"
 #include "board_pins.h"
@@ -38,6 +39,7 @@ void app_main(void)
     brownout_ll_intr_clear();
 #endif
     ESP_ERROR_CHECK(esp_task_wdt_add(NULL));
+    bmc_sleep_boot();
     esp_err_t charger_err = bq25601_init();
     if (charger_err != ESP_OK)
         ESP_LOGE(TAG, "charger configuration: %s", esp_err_to_name(charger_err));
@@ -85,6 +87,7 @@ void app_main(void)
 #endif
     ESP_ERROR_CHECK(esp_task_wdt_reset());
     while (1) {
+        bmc_sleep_poll();
         charger_err = bq25601_poll();
         if (charger_err != ESP_OK)
             ESP_LOGE(TAG, "charger verification: %s", esp_err_to_name(charger_err));

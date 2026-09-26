@@ -5,6 +5,7 @@ idf_component_register(
         "bmc_ota.c"
         "app_ota_wire.c"
         "bmc_power.c"
+        "bmc_sleep.c"
         "bmc_runtime.c"
         "bmc_lifecycle.c"
         "bmc_recovery.c"

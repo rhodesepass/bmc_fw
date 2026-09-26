@@ -169,6 +169,7 @@ static void test_shutdown_and_reset(void)
     advance(10000);
     assert(cuts == 1 && !boots);
     release();
+    assert(bmc_runtime_can_sleep());
     press();
     assert(boots == 1 && mainsys && !fake_core && !lifecycle.armed);
     assert(uart_direction == GPIO_MODE_OUTPUT && miso_direction == GPIO_MODE_INPUT_OUTPUT);
@@ -208,11 +209,14 @@ static void test_button(void)
     assert(!cuts);
     advance(1);
     assert(cuts == 1 && lifecycle.state == BMC_APP_OFF);
+    assert(!bmc_runtime_can_sleep());
     advance(10000);
     assert(cuts == 1 && !boots);
     release();
+    assert(bmc_runtime_can_sleep());
     press();
     assert(boots == 1 && !fake_core);
+    assert(!bmc_runtime_can_sleep());
 
     fresh();
     transact(2, lifecycle.epoch);

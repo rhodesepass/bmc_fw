@@ -9,11 +9,12 @@
 #include "soc/rtc_cntl_reg.h"
 #include "soc/soc.h"
 #include "recovery_state.h"
+#include "sleep_state.h"
 
 #if !CONFIG_IDF_TARGET_ESP32C3
 #error "BMC ROM rescue is specific to ESP32-C3"
 #endif
-#if !CONFIG_BOOTLOADER_CUSTOM_RESERVE_RTC || CONFIG_BOOTLOADER_CUSTOM_RESERVE_RTC_SIZE < 4
+#if !CONFIG_BOOTLOADER_CUSTOM_RESERVE_RTC || CONFIG_BOOTLOADER_CUSTOM_RESERVE_RTC_SIZE < 16
 #error "BMC rescue needs shared bootloader custom RTC memory"
 #endif
 #if CONFIG_BOOTLOADER_CUSTOM_RESERVE_RTC_IN_CRC
@@ -30,6 +31,7 @@ static void output_level(unsigned pin, unsigned level, bool open_drain)
     if (open_drain) gpio_ll_od_enable(&GPIO, pin);
     else gpio_ll_od_disable(&GPIO, pin);
     gpio_ll_output_enable(&GPIO, pin);
+    gpio_ll_hold_dis(&GPIO, pin);
 }
 
 static bool rescue_button_released(void)
@@ -71,6 +73,13 @@ static void enter_rom_rescue(void)
     for (unsigned i = 0; i < sizeof(spi_pins) / sizeof(spi_pins[0]); ++i) {
         esp_rom_gpio_pad_select_gpio(spi_pins[i]);
         gpio_ll_output_disable(&GPIO, spi_pins[i]);
+        gpio_ll_hold_dis(&GPIO, spi_pins[i]);
+    }
+    const unsigned quiet_pins[] = {CONFIG_BMC_GPIO_UART_RX, CONFIG_BMC_GPIO_UART_TX,
+                                  CONFIG_BMC_GPIO_TO_APP_IRQ};
+    for (unsigned i = 0; i < sizeof(quiet_pins) / sizeof(quiet_pins[0]); ++i) {
+        gpio_ll_output_disable(&GPIO, quiet_pins[i]);
+        gpio_ll_hold_dis(&GPIO, quiet_pins[i]);
     }
     esp_rom_delay_us(30000);
     /* C3 reset releases APP_RESET while the silent SPI bus lets D1s fall into FEL. */
@@ -88,6 +97,12 @@ void bootloader_before_init(void)
         bootloader_common_update_rtc_retain_mem(NULL, true);
     }
     volatile uint32_t *state = (volatile uint32_t *)retained->custom;
+    state[3] = BMC_SLEEP_BOOTLOADER_MAGIC;
+    if (esp_rom_get_reset_reason(0) == RESET_REASON_CORE_DEEP_SLEEP && bmc_sleep_retained(state)) {
+        if (rescue_button_released()) enter_rom_rescue();
+        return;
+    }
+    bmc_sleep_retain(state, false);
     unsigned attempts = bmc_recovery_decode(*state);
     if (attempts >= BMC_RECOVERY_FAILED_BOOTS || rescue_button_released())
         enter_rom_rescue();

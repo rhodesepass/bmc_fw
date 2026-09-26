@@ -178,7 +178,7 @@ static void cut_power(bool forced)
         lifecycle.armed = false;
         lifecycle.released = false;
         lifecycle.shutdown_at = 0;
-        ESP_LOGI(TAG, "APP powered off; BLE recovery stays available");
+        ESP_LOGI(TAG, "APP powered off; waiting for key release before deep sleep");
     } else {
         bmc_runtime_power_on();
         ESP_LOGE(TAG, "power cut failed: %s; power restored for recovery", esp_err_to_name(err));
@@ -217,6 +217,12 @@ void bmc_runtime_poll(void)
                (lifecycle.shutdown_at && now >= lifecycle.shutdown_at)) {
         cut_power(action == BMC_BUTTON_CUT);
     }
+}
+
+bool bmc_runtime_can_sleep(void)
+{
+    return lifecycle.state == BMC_APP_OFF && lifecycle.released &&
+        !key_raw && !key_stable && !bmc_mainsys_enabled();
 }
 
 void bmc_runtime_status(char *out, size_t size)

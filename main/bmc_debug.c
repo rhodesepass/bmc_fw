@@ -12,6 +12,7 @@
 #include "driver/uart.h"
 #include "bmc_runtime.h"
 #include "bmc_power.h"
+#include "bmc_sleep.h"
 #include "esp_check.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
@@ -43,6 +44,7 @@ static bool reset_d1_on_download;
 static bool fel_default, held = true, boot_decided;
 static SemaphoreHandle_t control_lock;
 static bool self_ota_active;
+static bool sleep_preparing;
 static esp_err_t spi_error = ESP_ERR_INVALID_STATE;
 
 static void append(struct history *h, const uint8_t *data, size_t len)
@@ -119,11 +121,19 @@ static esp_err_t persist_mode(bool fel)
 
 static esp_err_t uart_input(const uint8_t *bytes, size_t len)
 {
-    return uart_write_bytes(UART_NUM_0, bytes, len) == (int)len ? ESP_OK : ESP_FAIL;
+    xSemaphoreTake(control_lock, portMAX_DELAY);
+    esp_err_t err = sleep_preparing ? ESP_ERR_INVALID_STATE :
+        (uart_write_bytes(UART_NUM_0, bytes, len) == (int)len ? ESP_OK : ESP_FAIL);
+    xSemaphoreGive(control_lock);
+    return err;
 }
 
 static esp_err_t run_command(const char *request, char *response, size_t capacity)
 {
+    if (sleep_preparing && strcmp(request, "power-status")) {
+        snprintf(response, capacity, "BMC entering deep sleep");
+        return ESP_ERR_INVALID_STATE;
+    }
     esp_err_t err = ESP_OK;
     if (self_ota_active && (!strcmp(request, "ota-finish") || !strcmp(request, "ota-reboot") ||
                             !strcmp(request, "ota-abort"))) {
@@ -169,6 +179,12 @@ static esp_err_t run_command(const char *request, char *response, size_t capacit
     }
     if (!strcmp(request, "power-status")) {
         bmc_runtime_status(response, capacity);
+        size_t used = strlen(response);
+        bmc_sleep_status(response + used, capacity - used);
+        used = strlen(response);
+        snprintf(response + used, capacity - used, " sleep_block=%s",
+                 self_ota_active || app_ota_pending() ? "ota" :
+                 download_at ? "rescue" : bmc_runtime_can_sleep() ? "none" : "lifecycle_or_key");
         return ESP_OK;
     }
     if (!strcmp(request, "boot") || !strcmp(request, "fel") ||
@@ -178,7 +194,7 @@ static esp_err_t run_command(const char *request, char *response, size_t capacit
     if (!strncmp(request, "wifi-", 5))
         return bmc_link_command(request, response, capacity);
     if (!strcmp(request, "ota") || !strncmp(request, "ota-", 4)) {
-        if (strcmp(request, "ota-status") && strcmp(request, "charger-status")) boot_decided = true;
+        if (strcmp(request, "ota-status")) boot_decided = true;
         return app_ota_command(request, response, capacity);
     }
     if (app_ota_pending() && (!strcmp(request, "boot") || !strcmp(request, "reset"))) {
@@ -286,7 +302,7 @@ esp_err_t bmc_debug_self_ota_begin(void)
     if (!control_lock) return ESP_ERR_INVALID_STATE;
     xSemaphoreTake(control_lock, portMAX_DELAY);
     esp_err_t err = ESP_ERR_INVALID_STATE;
-    if (boot_decided && !self_ota_active && !app_ota_pending() && !download_at) {
+    if (boot_decided && !sleep_preparing && !self_ota_active && !app_ota_pending() && !download_at) {
         self_ota_active = true;
         err = ESP_OK;
     }
@@ -313,6 +329,18 @@ esp_err_t bmc_debug_link_command(const char *request, char *response, size_t cap
     return err;
 }
 
+bool bmc_debug_prepare_sleep(void)
+{
+    if (!control_lock) return false;
+    if (xSemaphoreTake(control_lock, 0) != pdTRUE) return false;
+    if (!sleep_preparing && boot_decided && !self_ota_active &&
+        !app_ota_pending() && !download_at && bmc_runtime_can_sleep())
+        sleep_preparing = true;
+    bool ready = sleep_preparing;
+    xSemaphoreGive(control_lock);
+    return ready;
+}
+
 static void debug_task(void *arg)
 {
     (void)arg;
@@ -325,12 +353,14 @@ static void debug_task(void *arg)
         int n = uart_read_bytes(UART_NUM_0, bytes, sizeof(bytes), pdMS_TO_TICKS(10));
         if (n > 0) append(&uart_log, bytes, n);
         if (xSemaphoreTake(control_lock, 0) == pdTRUE) {
-            bmc_runtime_poll();
+            if (!sleep_preparing) bmc_runtime_poll();
+            if (!sleep_preparing) {
+                if (ble_debug_uart_subscribed()) send_history(&uart_log, ble_debug_publish_uart);
+                if (ble_debug_log_subscribed()) send_history(&bmc_log, ble_debug_publish_log);
+            }
             ESP_ERROR_CHECK(esp_task_wdt_reset_user(control_watchdog));
             xSemaphoreGive(control_lock);
         }
-        if (ble_debug_uart_subscribed()) send_history(&uart_log, ble_debug_publish_uart);
-        if (ble_debug_log_subscribed()) send_history(&bmc_log, ble_debug_publish_log);
         portENTER_CRITICAL(&lock);
         int64_t deadline = download_at;
         bool reset_d1 = reset_d1_on_download;

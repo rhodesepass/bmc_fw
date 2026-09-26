@@ -11,5 +11,6 @@ void bmc_runtime_battery(const bat_gauge_snapshot_t *snapshot);
 void bmc_runtime_reset(void);
 void bmc_runtime_boot_seen(void);
 void bmc_runtime_poll(void);
+bool bmc_runtime_can_sleep(void);
 void bmc_runtime_status(char *out, size_t size);
 const uint8_t *bmc_runtime_spi_done(const uint8_t *rx, size_t bits);

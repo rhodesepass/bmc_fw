@@ -275,6 +275,39 @@ fail:
     return rc;
 }
 
+static bool stop_started;
+static esp_err_t stop_result = ESP_ERR_NOT_FINISHED;
+
+static void stop_task(void *arg)
+{
+    (void)arg;
+    int rc = nimble_port_stop();
+    esp_err_t result = ESP_FAIL;
+    if (!rc) {
+        reset_state();
+        result = nimble_port_deinit();
+    }
+    portENTER_CRITICAL(&state_lock);
+    stop_result = result;
+    portEXIT_CRITICAL(&state_lock);
+    vTaskDelete(NULL);
+}
+
+esp_err_t ble_debug_stop(void)
+{
+    if (!jobs) return ESP_OK;
+    /* NimBLE waits on its host task; keep the power manager's watchdog alive. */
+    if (!stop_started) {
+        if (xTaskCreate(stop_task, "ble_stop", 4096, NULL, 4, NULL) != pdPASS)
+            return ESP_ERR_NO_MEM;
+        stop_started = true;
+    }
+    portENTER_CRITICAL(&state_lock);
+    esp_err_t result = stop_result;
+    portEXIT_CRITICAL(&state_lock);
+    return result;
+}
+
 static esp_err_t publish(const uint8_t *data, size_t len, bool log)
 {
     if (!data && len) return ESP_ERR_INVALID_ARG;
